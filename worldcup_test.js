@@ -74,7 +74,6 @@ function change() {
 
 function transitionGrouped() {
   y.domain([0, yGroupMax]);
-debugger;
 
   rect.transition()
       .duration(500)
@@ -88,7 +87,6 @@ debugger;
 
 function transitionStacked() {
   y.domain([0, yStackMax]);
-debugger;
   rect.transition()
       .duration(500)
       .delay(function(d, i) { return i * 10; })
@@ -101,10 +99,7 @@ debugger;
 
 // Inspired by Lee Byron's test data generator.
 function bumpLayer(n, o) {
-
   function bump(a) {
-// console.log(a);
-//debugger;
     var x = 1 / (.1 + Math.random()),
         y = 2 * Math.random() - .5,
         z = 10 / (.1 + Math.random());

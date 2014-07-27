@@ -1,15 +1,11 @@
 var worldCup14 = {
-  n: 3,
-  m: 90,
   minutes: 10,
   stackLength: 3,  //goal, yellow card, red card
-  layers: [],  //goal, yellow card, red card
   yGroupMax: '',
   yStackMax: '',
-  viewWidth: 960,
+  viewWidth: 800,
   viewHeight: 500,
   stack: d3.layout.stack(),
-  eventData: [],
   dataSet: [],
   dataGoals: [
     goal10 = 0,
@@ -69,7 +65,6 @@ var worldCup14 = {
   loadJson: function() {
     d3.json("http://worldcup.sfg.io/matches.json", function(json) {
       worldCup14.getData(json);
-      worldCup14.createSvg();
     });
   },
 
@@ -80,7 +75,11 @@ var worldCup14 = {
       worldCup14.addData(json[i].home_team_events);
       worldCup14.addData(json[i].away_team_events);
     }
-    //worldCup14.sortData();
+    worldCup14.sortData();
+
+    worldCup14.addSort();
+    worldCup14.stack(worldCup14.dataSet);
+    worldCup14.createSvg();
   },
 
   //イベントデータを配列に追加
@@ -106,8 +105,6 @@ var worldCup14 = {
         }
       }
     }
-    worldCup14.addSort();
-    worldCup14.stack(worldCup14.dataSet);
   },
 
   //配列に追加したデータを時間ごとに分類
@@ -246,42 +243,188 @@ var worldCup14 = {
           break;
         case 1:
           for(var j = 0, jMax = worldCup14.dataGoals.length; j < jMax; j++) {
-            worldCup14.dataSet[1][j].y = worldCup14.dataGoals[j];
+            worldCup14.dataSet[1][j].y = worldCup14.dataYcards[j];
           }
           break;
         case 2:
           for(var j = 0, jMax = worldCup14.dataGoals.length; j < jMax; j++) {
-            worldCup14.dataSet[2][j].y = worldCup14.dataGoals[j];
+            worldCup14.dataSet[2][j].y = worldCup14.dataRcards[j];
           }
           break;
       }
     }
-
   },
 
 
   //svgを作成
   createSvg: function() {
-    // worldCup14.color = d3.scale.linear()
-    //   .domain([0, n - 1])
-    //   .range(["#aad", "#556"]);
-    var n = 3,
-        m = 90,
+    var n = 3, // number of layers
+        m = 10, // number of samples per layer
         layers,
-        xScale,
-        yScale,
         yGroupMax,
         yStackMax,
-        colors,
+        margin,
+        svgWidth,
+        svgHeight,
+        colors = ['#2F2FC9', '#F8F813', '#E61616'],
+        xScale,
+        yScale,
+        x,
+        y,
+        xAxis,
         svg,
         groups,
+        tooltip,
         rects;
+
+    margin = {top: 40, right: 10, bottom: 20, left: 10};
+    svgWidth = worldCup14.viewWidth - margin.left - margin.right;
+    svgHeight = worldCup14.viewHeight - margin.top - margin.bottom;
 
     layers = worldCup14.stack(d3.range(n).map(function() { return bumpLayer(m, .1); }));
 
+    yGroupMax = d3.max(layers, function(layer) { return d3.max(layer, function(d) { return d.y; }); });
+
+    yStackMax = d3.max(layers, function(layer) { return d3.max(layer, function(d) { return d.y0 + d.y; }); });
+
+
+    xScale = d3.scale.ordinal()
+              .domain(d3.range(worldCup14.dataSet[0].length))
+              .rangeRoundBands([0, svgWidth], 0.3);
+
+    yScale = d3.scale.linear()
+              .domain([0, d3.max(worldCup14.dataSet, function(d) {
+                return d3.max(d, function(d) {
+                  return (d.y0 + d.y);
+                });
+              })])
+              .range([0, svgHeight]);
+
+    x = d3.scale.ordinal()
+        .domain(d3.range(m))
+        .rangeRoundBands([0, svgWidth], .08);
+
+    y = d3.scale.linear()
+        .domain([0, yStackMax])
+        .range([svgHeight, 0]);
+
+    xAxis = d3.svg.axis()
+            .scale(x)
+            .tickSize(3)
+            .tickPadding(6)
+            .tickFormat(function(d, i){
+              if(i < 9) {
+                return (i * 10) + '〜' + (i + 1) * 10 + '分'
+              } else {
+                return (i * 10) + '分〜'
+              }
+            })
+            .orient("bottom")
+            .scale(xScale);
+
+    svg = d3.select('#view')
+            .append('svg')
+            .attr('width', svgWidth + margin.left + margin.right)
+            .attr('height', svgHeight + margin.top + margin.bottom)
+            .append("g")
+            .attr("transform", "translate(" + margin.left + "," + margin.top + ")");
+
+    groups = svg.selectAll('.layer')
+              .data(worldCup14.dataSet)
+              .enter()
+              .append('g')
+              .style('fill', function(d, i) {
+                return colors[i];
+              });
+
+    rects = groups.selectAll('rect')
+            .data(function(d) { return d; })
+            .enter()
+            .append('rect')
+            .attr('x', function(d, i) {
+              return xScale(i);
+            })
+            .attr('y', function(d) {
+              //return yScale(d.y0);
+              return worldCup14.viewHeight - (margin.top + margin.bottom) - (yScale(d.y) + yScale(d.y0));
+            })
+            .attr('height', function(d) {
+              return yScale(d.y);
+            })
+            .attr('width', xScale.rangeBand())
+            .on("mouseover", function(){
+              return tooltip.style("visibility", "visible");
+            })
+            .on("mousemove", function(d){
+              return tooltip
+                .style("top", (d3.event.pageY-10)+"px")
+                .style("left",(d3.event.pageX+10)+"px")
+                .html(d.y);
+            })
+            .on("mouseout", function(){
+              return tooltip.style("visibility", "hidden");
+            });
+
+
+    tooltip = d3.select("body")
+              .append("div")
+              .attr("class", "tooltip")
+              .style("position", "absolute")
+              .style("z-index", "10")
+              .style("visibility", "hidden")
+              .text("a simple tooltip");
+
+    svg.append("g")
+        .attr("class", "x axis")
+        .attr("transform", "translate(0," + svgHeight + ")")
+        .call(xAxis)
+        ;
+
+    d3.selectAll("input").on("change", change);
+    var timeout = setTimeout(function() {
+      d3.select("input[value=\"grouped\"]").property("checked", true).each(change);
+    }, 2000);
+    function change() {
+      clearTimeout(timeout);
+      if (this.value === "grouped") transitionGrouped();
+      else transitionStacked();
+    }
+    function transitionGrouped() {
+      y.domain([0, yGroupMax]);
+
+      rects.transition()
+          .duration(500)
+          .delay(function(d, i) { return i * 10; })
+          .attr("x", function(d, i, j) { return x(d.x) + x.rangeBand() / n * j; })
+          .attr("width", x.rangeBand() / n)
+        .transition()
+          .attr("y", function(d) { return svgHeight - yScale(d.y); })
+          .attr("height", function(d) {
+            return yScale(d.y);
+          });
+    }
+
+    function transitionStacked() {
+      y.domain([0, yStackMax]);
+      rects.transition()
+          .duration(500)
+          .delay(function(d, i) { return i * 10; })
+          .attr('y', function(d) {
+            return worldCup14.viewHeight - (margin.top + margin.bottom) - (yScale(d.y) + yScale(d.y0));
+          })
+          .attr('height', function(d) {
+            return yScale(d.y);
+          })
+        .transition()
+          .attr('x', function(d, i) {
+            return xScale(i);
+          })
+          .attr('width', xScale.rangeBand());
+    }
+
+
 // Inspired by Lee Byron's test data generator.
 function bumpLayer(n, o) {
-
   function bump(a) {
     var x = 1 / (.1 + Math.random()),
         y = 2 * Math.random() - .5,
@@ -298,61 +441,8 @@ function bumpLayer(n, o) {
   return a.map(function(d, i) { return {x: i, y: Math.max(0, d)}; });
 }
 
-    yGroupMax = d3.max(layers, function(layer) { return d3.max(layer, function(d) { return d.y; }); }),
-    yStackMax = d3.max(layers, function(layer) { return d3.max(layer, function(d) { return d.y0 + d.y; }); });
-
-    xScale = d3.scale.ordinal()
-              .domain(d3.range(m))
-              .rangeRoundBands([0, worldCup14.viewWidth], .08);
-
-    yScale = d3.scale.linear()
-              .domain([0, 
-                d3.max(worldCup14.dataSet, function(d) {
-                  return d3.max(d, function(d) {
-                    return d.y0 + d.y;
-                  });
-                })
-              ])
-              .range([0, worldCup14.viewHeight]);
-
-    colors = d3.scale.category10();
-
-    svg = d3.select('#view').append('svg')
-      .attr('width', this.viewWidth)
-      .attr('height', this.viewHeight)
-      .append("g");
-
-    groups = svg.selectAll('g')
-     .data(worldCup14.dataSet)
-     .enter()
-     .append('g')
-     .style('fill', function(d, i) {
-debugger;
-        return colors(i);
-     });
-
-     rects = groups.selectAll('rect')
-       .data(function(d) { return d;})
-       .enter()
-       .append('rect')
-       .attr('x', function(d, i) {
-        return xScale(i);
-       })
-       .attr('y', function(d) {
-        return yScale(d.y0);
-       })
-       .attr('height', function(d) {
-        return yScale(d.y);
-       })
-       .attr('width', xScale.rangeBand());
-    // worldCup14.svg.selectAll(".layer")
-    //   .data(layers)
-    //   .enter().append("g")
-    //   .attr("class", "layer")
-    //   .style("fill", function(d, i) { return worldCup14.color(i); });
-          //.attr("transform", "translate(" + margin.left + "," + margin.top + ")");
-    //worldCup14.yGroupMax = d3.max(worldCup14.layers, function(layers) { return d3.max(layer, function(d) { return d.y; }); });
   }
+
 }
 
 
